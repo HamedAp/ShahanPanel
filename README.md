@@ -146,7 +146,7 @@ Xray |  |  |  |  |  |  |  |  |
     - **WireGuard:** Full support for WireGuard users, including QR code configuration.
     - **ShadowSocks:** Easily create and manage ShadowSocks users.
 - **Enhanced Configuration:**
-    - **SignBox & Shahanak Support:** Generate QR codes for specialized client apps.
+    - **SingBox & Shahanak Support:** Generate QR codes for specialized client apps.
     - **OpenVPN:** Download user-specific OpenVPN configuration files.
 - **Automated Backups:**
     - **Protocol Backups:** Back up configurations for TUIC, ShadowSocks, WireGuard, and OpenVPN.
