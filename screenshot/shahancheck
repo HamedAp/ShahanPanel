@@ -130,9 +130,9 @@ else
 fi
 
 if systemctl is-active --quiet s-box.service; then
-    echo -e "${GREEN}Signbox = OK${ENDCOLOR}"
+    echo -e "${GREEN}Singbox = OK${ENDCOLOR}"
 else
-    echo -e "${RED}Signbox = NOT Running${ENDCOLOR}"
+    echo -e "${RED}Singbox = NOT Running${ENDCOLOR}"
 fi
 
 SERVICE="nethogs"
