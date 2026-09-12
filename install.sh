@@ -24,7 +24,11 @@ if [ -f "/var/www/html/p/index.php" ] && [ -f "/root/shahan_hash.txt" ]; then
         fi
 		php /var/www/html/p/restoretarikh.php
         rm -fr /var/www/html/update.zip
-        # Change ownership of /var/www/html/* after unzip
+        if  grep -q "Apache2 Ubuntu Default Page" "/var/www/html/index.html" ; then
+		cat >  /var/www/html/index.html << ENDOFFILE
+		<meta http-equiv="refresh" content="0;url=https://zula.ir/" />
+ENDOFFILE
+		fi
         chown -R www-data:www-data /var/www/html/* &
         wait
         sudo service apache2 restart
