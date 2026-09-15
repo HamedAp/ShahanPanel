@@ -1,60 +1,4 @@
 #!/bin/bash
-if [ -f "/var/www/html/p/index.php" ] && [ -f "/root/shahan_hash.txt" ]; then
-    if [ -f "$0" ]; then
-        CURRENT_HASH=$(sha256sum "$0" | awk '{print $1}')
-    else
-        CURRENT_HASH=$(curl -sL https://raw.githubusercontent.com/HamedAp/Ssh-User-management/main/install.sh | sha256sum | awk '{print $1}')
-    fi
-    LAST_HASH=$(cat /root/shahan_hash.txt)
-    if [ -n "$CURRENT_HASH" ] && [ "$CURRENT_HASH" = "$LAST_HASH" ]; then
-        echo "Fast Update: /var/www/html/p/index.php exists and install.sh is unchanged."
-        echo "Downloading zip file and unzipping it..."
-        if [ $# == 0 ]; then
-            link=$(sudo curl -Ls "https://api.github.com/repos/HamedAp/Ssh-User-management/releases/latest" | grep '"browser_download_url":' | sed -E 's/.*"([^"]+)".*/\1/')
-            sudo wget -O /var/www/html/update.zip $link
-            sudo unzip -o /var/www/html/update.zip -x "p/config.php" -d /var/www/html/ &
-            wait
-        else
-            last_version=$1
-            lastzip=$(echo $last_version | sed -e 's/\.//g')
-            link="https://github.com/HamedAp/Ssh-User-management/releases/download/$last_version/$lastzip.zip"
-            sudo wget -O /var/www/html/update.zip $link
-            sudo unzip -o /var/www/html/update.zip -x "p/config.php" -d /var/www/html/ &
-            wait
-        fi
-		php /var/www/html/p/restoretarikh.php
-        rm -fr /var/www/html/update.zip
-        if  grep -q "Apache2 Ubuntu Default Page" "/var/www/html/index.html" ; then
-		cat >  /var/www/html/index.html << ENDOFFILE
-		<meta http-equiv="refresh" content="0;url=https://zula.ir/" />
-ENDOFFILE
-		fi
-        chown -R www-data:www-data /var/www/html/* &
-        wait
-        sudo service apache2 restart
-		clear
-        echo "Fast Update Complete."
-        exit 0
-    fi
-fi
-rm "/tmp/last_text.txt"
-update_install_info() {
-    local newtext="$1"
-    touch "/tmp/last_text.txt"
-    if [ -f "/tmp/last_text.txt" ]; then
-        lasttext=$(cat /tmp/last_text.txt)
-    else
-        lasttext=""
-    fi
-    clear
-    if [ -n "$lasttext" ]; then
-        echo -e "$lasttext"
-        echo "----------------"
-    fi
-    echo "$newtext" >> /tmp/last_text.txt
-    tmpfile=$(mktemp)
-    awk '!seen[$0]++' /tmp/last_text.txt > "$tmpfile" && mv "$tmpfile" /tmp/last_text.txt
-}
 red='\033[0;31m'
 green='\033[0;32m'
 blue='\033[0;34m'
@@ -518,11 +462,4 @@ printf "\nUserName : \e[31m${adminusername}\e[0m "
 printf "\nPassword : \e[31m${adminpassword}\e[0m "
 printf "\nPort : \e[31m${port}\e[0m \n"
 printf "\nNOW You Can Use ${Green_font_prefix}shahan${Font_color_suffix} and ${Green_font_prefix}shahancheck${Font_color_suffix} and ${Green_font_prefix}listen${Font_color_suffix} Command To See Menu Of Shahan Panel \n"
-# Save the current script hash to compare on subsequent installs
-if [ -d "/var/www/html/p" ]; then
-    if [ -f "$0" ]; then
-        sha256sum "$0" | awk '{print $1}' > /root/shahan_hash.txt
-    else
-        curl -sL https://raw.githubusercontent.com/HamedAp/Ssh-User-management/main/install.sh | sha256sum | awk '{print $1}' > /root/shahan_hash.txt
-    fi
-fi
+
