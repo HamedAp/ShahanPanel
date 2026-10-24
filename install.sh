@@ -1,4 +1,21 @@
 #!/bin/bash
+update_install_info() {
+    local newtext="$1"
+    touch "/tmp/last_text.txt"
+    if [ -f "/tmp/last_text.txt" ]; then
+        lasttext=$(cat /tmp/last_text.txt)
+    else
+        lasttext=""
+    fi
+    clear
+    if [ -n "$lasttext" ]; then
+        echo -e "$lasttext"
+        echo "----------------"
+    fi
+    echo "$newtext" >> /tmp/last_text.txt
+    tmpfile=$(mktemp)
+    awk '!seen[$0]++' /tmp/last_text.txt > "$tmpfile" && mv "$tmpfile" /tmp/last_text.txt
+}
 red='\033[0;31m'
 green='\033[0;32m'
 blue='\033[0;34m'
