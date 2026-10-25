@@ -448,6 +448,16 @@ net.ipv4.tcp_rmem = 4096 87380 16777216
 net.ipv4.tcp_wmem = 4096 65536 16777216
 EOF
 sudo sysctl --system
+
+
+for sapi in apache2 cgi; do
+    sapi_conf="/etc/php/8.1/${sapi}/conf.d"
+    if [ -d "$sapi_conf" ]; then
+        printf '%s\n' 'session.upload_progress.enabled=0' > "$sapi_conf/99-security-session-upload-progress.ini"
+    fi
+done
+sudo service apache2 restart
+
 clear
 printf "%s" "$(</var/www/html/shahan.txt)"
 Green_font_prefix="\033[32m" && Red_font_prefix="\033[31m" && Font_color_suffix="\033[0m"
