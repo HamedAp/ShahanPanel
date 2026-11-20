@@ -202,7 +202,7 @@ EOF_APACHE
     die 'Apache mod_php8.1 is installed, but apache2ctl is unavailable for config validation.'
   fi
 fi
-
+clear
 log 'PHP2Shell package fixes are verified; session upload progress is administratively disabled for PHP 8.1.'
 if command -v systemctl >/dev/null && [[ -d /run/systemd/system ]]; then
   restart_if_active() {
