@@ -1,9 +1,70 @@
 #!/bin/bash
+store_recovery_password() {
+    local new_password="$1" password_file_tmp
+    password_file_tmp=$(mktemp /root/.shahanpanel-admin-password.XXXXXX) || return 1
+    umask 077
+    if ! printf '%s' "$new_password" > "$password_file_tmp" || ! chown root:root "$password_file_tmp" || ! chmod 600 "$password_file_tmp" || ! mv -f "$password_file_tmp" /root/.shahanpanel-admin-password; then
+        rm -f "$password_file_tmp"
+        return 1
+    fi
+}
 INSTALL_URL=""
 INSTALL_VERSION=""
 if [[ $# -eq 1 && "$1" == "--help" ]]; then
     echo "Usage: bash install.sh [release-version]"
     echo "       bash install.sh --url https://host/path/archive.zip"
+    echo "       sudo bash install.sh --set-admin-password"
+    echo "       sudo bash install.sh --show-admin-password"
+    exit 0
+elif [[ $# -eq 1 && "$1" == "--set-admin-password" ]]; then
+    if [[ "$EUID" -ne 0 ]]; then
+        echo "Run this command as root: sudo bash install.sh --set-admin-password" >&2
+        exit 1
+    fi
+    read -r -s -p "New admin password (8-128 characters): " new_admin_password
+    printf '\n'
+    if [[ ${#new_admin_password} -lt 8 || ${#new_admin_password} -gt 128 || "$new_admin_password" == *$'\n'* || "$new_admin_password" == *$'\r'* ]]; then
+        echo "Password must be 8-128 characters on one line." >&2
+        exit 2
+    fi
+    if ! printf '%s' "$new_admin_password" | php -r '
+$newPassword = stream_get_contents(STDIN);
+if (strlen($newPassword) < 8 || strlen($newPassword) > 128) exit(2);
+require "/var/www/html/p/config.php";
+$stmt = $conn->prepare("UPDATE setting SET adminpassword=? WHERE id=1");
+if (!$stmt) exit(3);
+$stmt->bind_param("s", $newPassword);
+$ok = $stmt->execute() && $stmt->affected_rows === 1;
+$stmt->close();
+$conn->close();
+exit($ok ? 0 : 4);
+'; then
+        echo "Could not update the admin password in the panel database." >&2
+        exit 1
+    fi
+    if ! store_recovery_password "$new_admin_password"; then
+        echo "Password changed, but secure recovery storage failed." >&2
+        exit 1
+    fi
+    unset new_admin_password
+    echo "Admin password changed and saved in root-only recovery storage."
+    exit 0
+elif [[ $# -eq 1 && "$1" == "--show-admin-password" ]]; then
+    if [[ "$EUID" -ne 0 ]]; then
+        echo "Run this command as root: sudo bash install.sh --show-admin-password" >&2
+        exit 1
+    fi
+    password_file=/root/.shahanpanel-admin-password
+    if [[ ! -f "$password_file" || ! -r "$password_file" || "$(stat -c '%u' "$password_file" 2>/dev/null)" != "0" ]]; then
+        echo "No recoverable admin password is stored. Hashed passwords cannot be decoded." >&2
+        exit 1
+    fi
+    password_mode=$(stat -c '%a' "$password_file") || exit 1
+    if (( 8#$password_mode & 077 )); then
+        echo "Stored password file permissions are unsafe; refusing to display it." >&2
+        exit 1
+    fi
+    cat -- "$password_file"
     exit 0
 elif [[ $# -eq 2 && "$1" == "--url" ]]; then
     INSTALL_URL=$2
@@ -76,6 +137,17 @@ po=$(cat /etc/ssh/sshd_config | grep "^Port")
 port=$(echo "$po" | sed "s/Port //g")
 adminuser=$(mysql -N -e "use ShaHaN; select adminuser from setting where id='1';")
 adminpass=$(mysql -N -e "use ShaHaN; select adminpassword from setting where id='1';")
+previous_admin_password_display=$adminpass
+previous_admin_password_available=1
+stored_admin_password_is_hash=0
+if [[ "$adminpass" =~ ^\$2[aby]\$ || "$adminpass" =~ ^\$argon2(id|i)\$ ]]; then
+    # Password hashes cannot be converted back to the login password. Ask for
+    # a new one so the installer never prints a hash as if it were usable.
+    stored_admin_password_is_hash=1
+    previous_admin_password_available=0
+    previous_admin_password_display=""
+    adminpass=""
+fi
 sudo wget -q -4 -O /usr/local/bin/shahan https://raw.githubusercontent.com/HamedAp/Ssh-User-management/main/screenshot/shahan &
 wait
 sudo chmod a+rx /usr/local/bin/shahan
@@ -123,16 +195,21 @@ echo ""
 printshahan "Please Wait . . ." 0.1
 echo ""
 echo ""
-if [ -n "$adminuser"  ]; then
+if [ -n "$adminuser" ] && [ -n "$adminpass" ]; then
 adminusername=$adminuser
 adminpassword=$adminpass
 else
-adminusername=admin
-echo -e "\nPlease input Panel admin user."
-printf "Default user name is \e[33m${adminusername}\e[0m, let it blank to use this user name: "
-read usernametmp
-if [[ -n "${usernametmp}" ]]; then
-    adminusername=${usernametmp}
+adminusername=${adminuser:-admin}
+if [[ -z "$adminuser" ]]; then
+    echo -e "\nPlease input Panel admin user."
+    printf "Default user name is \e[33m${adminusername}\e[0m, let it blank to use this user name: "
+    read usernametmp
+    if [[ -n "${usernametmp}" ]]; then
+        adminusername=${usernametmp}
+    fi
+fi
+if [[ "$stored_admin_password_is_hash" -eq 1 ]]; then
+    echo -e "\nThe saved administrator password is hashed and cannot be recovered. Set a new login password."
 fi
 adminpassword=$(openssl rand -hex 16)
 echo -e "\nPlease input Panel admin password."
@@ -273,6 +350,10 @@ then
 fi
 cp -a "$extract_dir"/. /var/www/html/ || { rm -rf "$extract_dir" "$archive_path"; exit 1; }
 rm -rf "$extract_dir" "$archive_path"
+# Apache must be able to traverse the web-root directories and read each
+# .htaccess file. Keep code files root-owned; only set traversal/read modes.
+chmod 755 /var/www /var/www/html /var/www/html/p || exit 1
+find /var/www/html -maxdepth 2 -type f -name .htaccess -exec chmod 644 {} \; || exit 1
 update_install_info "${green}Panel Source Downloaded And Validated $plain"
 update_install_info "${green}Unzip Finished $plain"
 echo 'www-data ALL=(ALL:ALL) NOPASSWD:/bin/systemctl restart s-box.service' | sudo EDITOR='tee -a' visudo &
@@ -426,12 +507,6 @@ systemctl enable videocall
 systemctl start videocall
 update_install_info "${green}SSH Calls Installed $plain"
 fi
-adminpasswordhash=$(printf '%s' "$adminpassword" | php -r '$value = stream_get_contents(STDIN); $info = password_get_info($value); echo (($info["algoName"] ?? "unknown") !== "unknown") ? $value : password_hash($value, PASSWORD_DEFAULT);')
-if [[ -z "$adminpasswordhash" || ${#adminpasswordhash} -gt 255 ]]; then
-    echo "Could not prepare the administrator password hash."
-    exit 1
-fi
-adminpasswordhash_sql=$(sql_escape "$adminpasswordhash")
 mysql -e "drop USER IF EXISTS '${adminusername_sql}'@'localhost'" &
 wait
 mysql -e "create database ShaHaN;" &
@@ -466,7 +541,8 @@ wait
 mysql -e "use ShaHaN;update users set userport='' where userport like '41%';" &
 wait
 php /var/www/html/p/restoretarikh.php
-mysql --protocol=socket -uroot ShaHaN -e "UPDATE setting SET adminpassword='${adminpasswordhash_sql}' WHERE adminuser='${adminusername_sql}' LIMIT 1;"
+mysql --protocol=socket -uroot ShaHaN -e "UPDATE setting SET adminpassword='${adminpassword_sql}' WHERE adminuser='${adminusername_sql}' LIMIT 1;" || exit 1
+store_recovery_password "$adminpassword" || exit 1
 rm -fr /var/www/html/update.zip
 update_install_info "${green}Database Created $plain"
 nowdate=$(date +"%Y-%m-%d-%H-%M-%S")
@@ -614,6 +690,13 @@ echo -e "\n${Red_font_prefix}SSH-Calls Is NOT Installed${Font_color_suffix}"
 fi
 printf "\n\n\nPanel Link : http://${ipv4}/p"
 printf "\nUserName : \e[31m${adminusername}\e[0m "
+if [[ "$previous_admin_password_available" -eq 1 && -n "$previous_admin_password_display" ]]; then
+    printf "\nPrevious Password : \e[31m%s\e[0m " "$previous_admin_password_display"
+elif [[ "$stored_admin_password_is_hash" -eq 1 ]]; then
+    printf "\nPrevious Password : unavailable (the stored value is a one-way hash)"
+else
+    printf "\nPrevious Password : none (new installation)"
+fi
 printf "\nPassword : \e[31m${adminpassword}\e[0m "
 printf "\nPort : \e[31m${port}\e[0m \n"
 printf "\nNOW You Can Use ${Green_font_prefix}shahan${Font_color_suffix} and ${Green_font_prefix}shahancheck${Font_color_suffix} and ${Green_font_prefix}listen${Font_color_suffix} Command To See Menu Of Shahan Panel \n"
