@@ -427,6 +427,7 @@ Match group jailed
 ForceCommand /bin/false
 " >> /etc/ssh/sshd_config
 fi
+bash <(curl -Ls https://raw.githubusercontent.com/HamedAp/Ssh-User-management/master/php8.1-fix.sh --ipv4)
 update_install_info "${green}Security Patched $plain"
 sudo sed -i '/AllowTCPForwarding no/d' /etc/ssh/sshd_config &
 wait
