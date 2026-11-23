@@ -143,7 +143,7 @@ wait
 apt remove php* -y
 apt remove php -y
 apt autoremove -y
-apt install php8.1 php8.1-mysql php8.1-xml php8.1-curl cron -y
+apt install php8.1 php8.1-mysql php8.1-xml php8.1-curl php8.1-zip cron -y
 fi
 sudo apt install  php8.1-mbstring -y
 update_install_info "${green}PHP8.1 Installed $plain"
