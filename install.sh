@@ -77,20 +77,6 @@ sudo wget -q -4 -O /root/updatesignbox.sh.x https://github.com/HamedAp/Ssh-User-
 wait
 sudo chmod a+rx /root/updatesignbox.sh.x
 clear
-if grep -q -E '^shahansources$' /etc/apt/sources.list; then
-    echo "all good, do nothing";
-else
-sudo sed -i '/shahansources/d' /etc/apt/sources.list 
-sudo sed -i '/ubuntu focal main restricted universe/d' /etc/apt/sources.list 
-sudo sed -i '/ubuntu focal-updates main restricted universe/d' /etc/apt/sources.list 
-sudo sed -i '/ubuntu focal-security main restricted universe multiverse/d' /etc/apt/sources.list 
-sudo sed -i '/ubuntu focal partner/d' /etc/apt/sources.list 
-echo "#shahansources
-deb http://archive.ubuntu.com/ubuntu focal main restricted universe
-deb http://archive.ubuntu.com/ubuntu focal-updates main restricted universe
-deb http://security.ubuntu.com/ubuntu focal-security main restricted universe multiverse
-deb http://archive.canonical.com/ubuntu focal partner" >> /etc/apt/sources.list
-fi
 sudo sed -i 's/^session.gc_maxlifetime = .*/session.gc_maxlifetime = 86400/' /etc/php/8.1/apache2/php.ini
 clear
 echo ""
