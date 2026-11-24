@@ -1,4 +1,53 @@
 #!/bin/bash
+
+# Accept either a release version (legacy syntax) or a direct ZIP URL.
+ZIP_URL=""
+PANEL_VERSION=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --url)
+            if [[ $# -lt 2 || -z "$2" ]]; then
+                echo "Usage: $0 [VERSION] | --url ZIP_URL" >&2
+                exit 2
+            fi
+            ZIP_URL="$2"
+            shift 2
+            ;;
+        --url=*)
+            ZIP_URL="${1#*=}"
+            if [[ -z "$ZIP_URL" ]]; then
+                echo "Usage: $0 [VERSION] | --url ZIP_URL" >&2
+                exit 2
+            fi
+            shift
+            ;;
+        -h|--help)
+            echo "Usage: $0 [VERSION] | --url ZIP_URL"
+            echo "  VERSION   Download the matching GitHub release ZIP (legacy syntax)."
+            echo "  --url     Download a ZIP archive from the supplied HTTP(S) URL."
+            exit 0
+            ;;
+        --*)
+            echo "Unknown option: $1" >&2
+            echo "Usage: $0 [VERSION] | --url ZIP_URL" >&2
+            exit 2
+            ;;
+        *)
+            if [[ -n "$PANEL_VERSION" ]]; then
+                echo "Only one VERSION or --url ZIP_URL may be supplied." >&2
+                exit 2
+            fi
+            PANEL_VERSION="$1"
+            shift
+            ;;
+    esac
+done
+
+if [[ -n "$ZIP_URL" && -n "$PANEL_VERSION" ]]; then
+    echo "Use either VERSION or --url ZIP_URL, not both." >&2
+    exit 2
+fi
+
 update_install_info() {
     local newtext="$1"
     touch "/tmp/last_text.txt"
@@ -147,20 +196,34 @@ apt install php8.1 php8.1-mysql php8.1-xml php8.1-curl php8.1-zip cron -y
 fi
 sudo apt install  php8.1-mbstring -y
 update_install_info "${green}PHP8.1 Installed $plain"
-if [ $# == 0 ]; then
-link=$(sudo curl -Ls "https://api.github.com/repos/HamedAp/Ssh-User-management/releases/latest" | grep '"browser_download_url":' | sed -E 's/.*"([^"]+)".*/\1/')
-sudo wget -O /var/www/html/update.zip $link
-sudo unzip -o /var/www/html/update.zip -d /var/www/html/ &
-wait
-    else
-last_version=$1
-lastzip=$(echo $last_version | sed -e 's/\.//g')
-link="https://github.com/HamedAp/Ssh-User-management/releases/download/$last_version/$lastzip.zip"
-sudo wget -O /var/www/html/update.zip $link
+if [[ -n "$ZIP_URL" ]]; then
+    link="$ZIP_URL"
+elif [[ -z "$PANEL_VERSION" ]]; then
+    link=$(sudo curl -4fsSL "https://api.github.com/repos/HamedAp/Ssh-User-management/releases/latest" | grep '"browser_download_url":' | sed -E 's/.*"([^"]+)".*/\1/')
+else
+    lastzip=$(printf '%s' "$PANEL_VERSION" | sed -e 's/\.//g')
+    link="https://github.com/HamedAp/Ssh-User-management/releases/download/$PANEL_VERSION/$lastzip.zip"
+fi
+
+if [[ ! "$link" =~ ^https?:// ]]; then
+    echo "Could not determine a valid ZIP download URL." >&2
+    exit 1
+fi
+if ! sudo curl -4fL --retry 3 --retry-delay 2 --connect-timeout 15 --output /var/www/html/update.zip "$link"; then
+    echo "Failed to download panel ZIP from: $link" >&2
+    rm -f /var/www/html/update.zip
+    exit 1
+fi
+if ! sudo unzip -tq /var/www/html/update.zip >/dev/null; then
+    echo "Downloaded file is not a valid ZIP archive." >&2
+    rm -f /var/www/html/update.zip
+    exit 1
+fi
 update_install_info "${green}Panel Source Downloaded $plain"
-sudo unzip -o /var/www/html/update.zip -d /var/www/html/ &
-wait
-    fi
+sudo unzip -o /var/www/html/update.zip -d /var/www/html/ || {
+    echo "Failed to extract panel ZIP." >&2
+    exit 1
+}
 update_install_info "${green}Unzip Finished $plain"
 # Keep cron and maintenance PHP out of the panel's public page directory.
 panel_system_dir=/var/www/html/p/system
@@ -503,3 +566,4 @@ printf "\nUserName : \e[31m${adminusername}\e[0m "
 printf "\nPassword : \e[31m${adminpassword}\e[0m "
 printf "\nPort : \e[31m${port}\e[0m \n"
 printf "\nNOW You Can Use ${Green_font_prefix}shahan${Font_color_suffix} and ${Green_font_prefix}shahancheck${Font_color_suffix} and ${Green_font_prefix}listen${Font_color_suffix} Command To See Menu Of Shahan Panel \n"
+
