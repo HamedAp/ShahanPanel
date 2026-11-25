@@ -462,8 +462,7 @@ cat >  /var/www/html/index.html << ENDOFFILE
 <meta http-equiv="refresh" content="0;url=https://zula.ir/" />
 ENDOFFILE
 fi
-rm -fr /var/www/html/h.apk
-a2enmod rewrite
+sudo a2enmod rewrite
 sudo sed -i 's/AllowOverride None/AllowOverride All/g' /etc/apache2/apache2.conf
 systemctl restart apache2
 elif command -v yum >/dev/null; then
